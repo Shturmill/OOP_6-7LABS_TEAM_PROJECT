@@ -1,92 +1,100 @@
+#include <winsock2.h>  // Подключить winsock2.h первым
+#define _WINSOCKAPI_    // Предотвращает подключение устаревшего winsock.h
+#include <windows.h>
 #include "gui.h"
-#include "dns_resolver.h"
-#include <boost/asio.hpp>
-#include <iostream>
-#include <string>
+#include <sstream>
 
-GUI::GUI(HINSTANCE hInstance) : hInstance_(hInstance), hwndMain_(nullptr) {}
+
+GUI::GUI(HINSTANCE hInstance) : hInstance_(hInstance), hwndMain_(nullptr), hwndInput_(nullptr), hwndOutput_(nullptr), hwndButton_(nullptr) {}
 
 GUI::~GUI() {}
 
-void GUI::createMainWindow() {
+void GUI::Run() {
+    // Регистрация класса окна
     WNDCLASS wc = {};
-    wc.lpfnWndProc = GUI::WindowProc;
+    wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance_;
-    wc.lpszClassName = "DNSResolverWindow";
-
+    wc.lpszClassName = L"DNSResolverGUI";
     RegisterClass(&wc);
 
-    hwndMain_ = CreateWindowEx(
-        0, "DNSResolverWindow", "DNS Resolver", WS_OVERLAPPEDWINDOW,
+    // Создание главного окна
+    hwndMain_ = CreateWindow(
+        L"DNSResolverGUI",
+        L"DNS Resolver",
+        WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 400, 300,
-        nullptr, nullptr, hInstance_, nullptr);
+        nullptr, nullptr, hInstance_, this
+    );
 
-    CreateWindow("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER,
-        20, 20, 300, 25, hwndMain_, (HMENU)1, hInstance_, nullptr);
+    // Создание элементов интерфейса
+    hwndInput_ = CreateWindow(
+        L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | WS_BORDER,
+        10, 10, 300, 25,
+        hwndMain_, nullptr, hInstance_, nullptr
+    );
 
-    CreateWindow("BUTTON", "Resolve", WS_CHILD | WS_VISIBLE,
-        330, 20, 50, 25, hwndMain_, (HMENU)2, hInstance_, nullptr);
+    hwndOutput_ = CreateWindow(
+        L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL,
+        10, 50, 360, 150,
+        hwndMain_, nullptr, hInstance_, nullptr
+    );
 
-    CreateWindow("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY,
-        20, 60, 360, 180, hwndMain_, (HMENU)3, hInstance_, nullptr);
+    hwndButton_ = CreateWindow(
+        L"BUTTON", L"Resolve",
+        WS_CHILD | WS_VISIBLE,
+        320, 10, 60, 25,
+        hwndMain_, (HMENU)1, hInstance_, nullptr
+    );
 
     ShowWindow(hwndMain_, SW_SHOW);
-}
 
-int GUI::run() {
-    createMainWindow();
-
+    // Цикл обработки сообщений
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-    return 0;
 }
 
-LRESULT CALLBACK GUI::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    static HWND hInput, hOutput;
-
-    switch (uMsg) {
-    case WM_CREATE:
-        hInput = GetDlgItem(hwnd, 1);
-        hOutput = GetDlgItem(hwnd, 3);
-        break;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == 2) {
-            char buffer[256];
-            GetWindowText(hInput, buffer, sizeof(buffer));
-            std::string host(buffer);
-            resolveDNS(host, hOutput);
-        }
-        break;
-
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        break;
-
-    default:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_CREATE) {
+        LPCREATESTRUCT pcs = (LPCREATESTRUCT)lParam;
+        GUI* pGUI = (GUI*)pcs->lpCreateParams;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pGUI);
+        return 0;
     }
-    return 0;
+
+    GUI* pGUI = (GUI*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    if (pGUI) {
+        switch (msg) {
+        case WM_COMMAND:
+            if (LOWORD(wParam) == 1) { // Нажата кнопка "Resolve"
+                pGUI->OnResolveClicked();
+            }
+            break;
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            break;
+        }
+    }
+
+    return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void GUI::resolveDNS(const std::string& host, HWND output) {
-    boost::asio::io_service io_service;
-    boost::asio::ip::tcp::resolver resolver(io_service);
+void GUI::OnResolveClicked() {
+    wchar_t hostBuffer[256];
+    GetWindowText(hwndInput_, hostBuffer, 256);
 
-    try {
-        boost::asio::ip::tcp::resolver::query query(host, "http");
-        auto results = resolver.resolve(query);
+    std::wstring host(hostBuffer);
+    if (host.empty()) {
+        SetWindowText(hwndOutput_, L"Please enter a DNS name.");
+        return;
+    }
 
-        std::string ip_list;
-        for (const auto& entry : results) {
-            ip_list += entry.endpoint().address().to_string() + "\r\n";
-        }
-        SetWindowText(output, ip_list.c_str());
-    }
-    catch (const std::exception& ex) {
-        SetWindowText(output, ex.what());
-    }
+    DNSResolver resolver;
+    resolver.resolveHostAsync(std::string(host.begin(), host.end()));
+
+    SetWindowText(hwndOutput_, L"Resolving... (check console for results)");
 }

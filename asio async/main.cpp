@@ -1,15 +1,7 @@
-#include "dns_resolver.h"
-#include <iostream>
-#include <string>
-#include <thread>
+#include "gui.h"
 
-int main() {
-    std::string host;
-    std::cout << "Enter the DNS: ";
-    std::cin >> host;
-
-    // Запуск асинхронного разрешения DNS
-    resolveDNSAsync(host);
-
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
+    GUI gui(hInstance);
+    gui.Run();
     return 0;
 }
