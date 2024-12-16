@@ -1,6 +1,11 @@
+#include <winsock2.h>
+#define _WINSOCKAPI_
+#include <windows.h>
 #include "dns_resolver.h"
 #include <iostream>
 #include <thread>
+
+
 
 // Конструктор и деструктор для DNSResolver
 DNSResolver::DNSResolver() : resolver_(io_service_) {}

@@ -1,9 +1,10 @@
-#include <winsock2.h>  // Подключить winsock2.h первым
-#define _WINSOCKAPI_    // Предотвращает подключение устаревшего winsock.h
+#include <winsock2.h>
+#define _WINSOCKAPI_
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include "gui.h"
 #include <sstream>
-
 
 GUI::GUI(HINSTANCE hInstance) : hInstance_(hInstance), hwndMain_(nullptr), hwndInput_(nullptr), hwndOutput_(nullptr), hwndButton_(nullptr) {}
 
@@ -93,8 +94,14 @@ void GUI::OnResolveClicked() {
         return;
     }
 
+    // Преобразование из std::wstring в std::string
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, host.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string host_utf8(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, host.c_str(), -1, &host_utf8[0], size_needed, nullptr, nullptr);
+
     DNSResolver resolver;
-    resolver.resolveHostAsync(std::string(host.begin(), host.end()));
+    resolver.resolveHostAsync(host_utf8);
 
     SetWindowText(hwndOutput_, L"Resolving... (check console for results)");
 }
+

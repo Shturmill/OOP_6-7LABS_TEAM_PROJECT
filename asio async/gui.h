@@ -1,5 +1,7 @@
 #pragma once
 
+#include <winsock2.h>
+#define _WINSOCKAPI_
 #include <windows.h>
 #include "dns_resolver.h"
 

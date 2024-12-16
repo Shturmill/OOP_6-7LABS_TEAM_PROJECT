@@ -1,5 +1,8 @@
 #pragma once
 
+#include <winsock2.h>
+#define _WINSOCKAPI_
+#include <windows.h>
 #include <string>
 #include <vector>
 #include <boost/asio.hpp>
