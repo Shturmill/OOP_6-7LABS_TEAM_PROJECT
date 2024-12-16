@@ -10,7 +10,6 @@ public:
     GUI(HINSTANCE hInstance);
     ~GUI();
 
-    // Запуск главного окна
     void Run();
 
 private:
@@ -20,9 +19,9 @@ private:
     HWND hwndOutput_;
     HWND hwndButton_;
 
-    // Обработчик оконных сообщений
-    static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    DNSResolver* resolver_; // Указатель на DNSResolver
 
-    // Обработка действий в GUI
+    static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void OnResolveClicked();
+    void AddControls(HWND hwnd);
 };

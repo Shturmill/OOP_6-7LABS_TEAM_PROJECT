@@ -4,21 +4,28 @@
 #define _UNICODE
 #include <windows.h>
 #include "gui.h"
+#include "dns_resolver.h"
 #include <sstream>
 
-GUI::GUI(HINSTANCE hInstance) : hInstance_(hInstance), hwndMain_(nullptr), hwndInput_(nullptr), hwndOutput_(nullptr), hwndButton_(nullptr) {}
+#define IDC_INPUT 101
+#define IDC_OUTPUT 102
+#define IDC_BUTTON 103
 
-GUI::~GUI() {}
+GUI::GUI(HINSTANCE hInstance)
+    : hInstance_(hInstance), hwndMain_(nullptr), hwndInput_(nullptr), hwndOutput_(nullptr),
+    hwndButton_(nullptr), resolver_(new DNSResolver()) {}
+
+GUI::~GUI() {
+    delete resolver_; // Удаление DNSResolver
+}
 
 void GUI::Run() {
-    // Регистрация класса окна
     WNDCLASS wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance_;
     wc.lpszClassName = L"DNSResolverGUI";
     RegisterClass(&wc);
 
-    // Создание главного окна
     hwndMain_ = CreateWindow(
         L"DNSResolverGUI",
         L"DNS Resolver",
@@ -27,31 +34,8 @@ void GUI::Run() {
         nullptr, nullptr, hInstance_, this
     );
 
-    // Создание элементов интерфейса
-    hwndInput_ = CreateWindow(
-        L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | WS_BORDER,
-        10, 10, 300, 25,
-        hwndMain_, nullptr, hInstance_, nullptr
-    );
-
-    hwndOutput_ = CreateWindow(
-        L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL,
-        10, 50, 360, 150,
-        hwndMain_, nullptr, hInstance_, nullptr
-    );
-
-    hwndButton_ = CreateWindow(
-        L"BUTTON", L"Resolve",
-        WS_CHILD | WS_VISIBLE,
-        320, 10, 60, 25,
-        hwndMain_, (HMENU)1, hInstance_, nullptr
-    );
-
     ShowWindow(hwndMain_, SW_SHOW);
 
-    // Цикл обработки сообщений
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
@@ -59,11 +43,35 @@ void GUI::Run() {
     }
 }
 
+void GUI::AddControls(HWND hwnd) {
+    hwndInput_ = CreateWindow(
+        L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | WS_BORDER,
+        10, 10, 300, 25,
+        hwnd, (HMENU)IDC_INPUT, hInstance_, nullptr
+    );
+
+    hwndOutput_ = CreateWindow(
+        L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL,
+        10, 50, 360, 150,
+        hwnd, (HMENU)IDC_OUTPUT, hInstance_, nullptr
+    );
+
+    hwndButton_ = CreateWindow(
+        L"BUTTON", L"Resolve",
+        WS_CHILD | WS_VISIBLE,
+        320, 10, 60, 25,
+        hwnd, (HMENU)IDC_BUTTON, hInstance_, nullptr
+    );
+}
+
 LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_CREATE) {
         LPCREATESTRUCT pcs = (LPCREATESTRUCT)lParam;
         GUI* pGUI = (GUI*)pcs->lpCreateParams;
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pGUI);
+        pGUI->AddControls(hwnd);
         return 0;
     }
 
@@ -71,10 +79,40 @@ LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     if (pGUI) {
         switch (msg) {
         case WM_COMMAND:
-            if (LOWORD(wParam) == 1) { // Нажата кнопка "Resolve"
+            if (LOWORD(wParam) == IDC_BUTTON) {
                 pGUI->OnResolveClicked();
             }
             break;
+
+        case WM_USER + 1: {
+            auto results = reinterpret_cast<std::wstring*>(wParam);
+            int len = GetWindowTextLength(pGUI->hwndOutput_);
+            if (len > 0) {
+                SendMessage(pGUI->hwndOutput_, EM_SETSEL, len, len);
+                SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)L"\r\n");
+            }
+            SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)results->c_str());
+
+            delete results;  // Освобождение памяти
+        } break;
+
+        case WM_TIMER: {
+            if (wParam == 1) { // ID таймера
+                const auto& results = pGUI->resolver_->getResults();
+                for (const auto& address : results) {
+                    int len = GetWindowTextLength(pGUI->hwndOutput_);
+                    if (len > 0) {
+                        SendMessage(pGUI->hwndOutput_, EM_SETSEL, len, len);
+                        SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)L"\r\n");
+                    }
+                    SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)address.c_str());
+                }
+
+                KillTimer(hwnd, 1); // Останавливаем таймер после обновления
+            }
+            break;
+        }
+
         case WM_DESTROY:
             PostQuitMessage(0);
             break;
@@ -94,14 +132,12 @@ void GUI::OnResolveClicked() {
         return;
     }
 
-    // Преобразование из std::wstring в std::string
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, host.c_str(), -1, nullptr, 0, nullptr, nullptr);
     std::string host_utf8(size_needed, 0);
     WideCharToMultiByte(CP_UTF8, 0, host.c_str(), -1, &host_utf8[0], size_needed, nullptr, nullptr);
 
-    DNSResolver resolver;
-    resolver.resolveHostAsync(host_utf8);
+    resolver_->setOutputHandle(hwndOutput_);
+    resolver_->resolveHostAsync(host_utf8);
 
-    SetWindowText(hwndOutput_, L"Resolving... (check console for results)");
+    SetTimer(hwndMain_, 1, 500, nullptr); // Установка таймера для обновления результатов
 }
-
