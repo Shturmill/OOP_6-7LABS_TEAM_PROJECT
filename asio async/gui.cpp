@@ -16,7 +16,7 @@ GUI::GUI(HINSTANCE hInstance)
     hwndButton_(nullptr), resolver_(new DNSResolver()) {}
 
 GUI::~GUI() {
-    delete resolver_; // Удаление DNSResolver
+    delete resolver_; 
 }
 
 void GUI::Run() {
@@ -93,11 +93,11 @@ LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
             SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)results->c_str());
 
-            delete results;  // Освобождение памяти
+            delete results;  
         } break;
 
         case WM_TIMER: {
-            if (wParam == 1) { // ID таймера
+            if (wParam == 1) { 
                 const auto& results = pGUI->resolver_->getResults();
                 for (const auto& address : results) {
                     int len = GetWindowTextLength(pGUI->hwndOutput_);
@@ -108,7 +108,7 @@ LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     SendMessage(pGUI->hwndOutput_, EM_REPLACESEL, 0, (LPARAM)address.c_str());
                 }
 
-                KillTimer(hwnd, 1); // Останавливаем таймер после обновления
+                KillTimer(hwnd, 1);
             }
             break;
         }
@@ -126,6 +126,7 @@ void GUI::OnResolveClicked() {
     wchar_t hostBuffer[256];
     GetWindowText(hwndInput_, hostBuffer, 256);
 
+    SetWindowText(hwndOutput_, L"");
     std::wstring host(hostBuffer);
     if (host.empty()) {
         SetWindowText(hwndOutput_, L"Please enter a DNS name.");
@@ -139,5 +140,5 @@ void GUI::OnResolveClicked() {
     resolver_->setOutputHandle(hwndOutput_);
     resolver_->resolveHostAsync(host_utf8);
 
-    SetTimer(hwndMain_, 1, 500, nullptr); // Установка таймера для обновления результатов
+    SetTimer(hwndMain_, 1, 500, nullptr); 
 }
